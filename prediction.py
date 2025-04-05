@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
-import tensorflow as tf
+import torch
+import torch.nn as nn
 from statsmodels.tsa.arima.model import ARIMA
 from prophet import Prophet
 from sklearn.preprocessing import MinMaxScaler
@@ -105,41 +106,106 @@ class StockPredictor:
                 # Reshape for LSTM input [samples, time steps, features]
                 x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
                 
-                # Build LSTM model
-                model = tf.keras.Sequential([
-                    tf.keras.layers.LSTM(50, return_sequences=True, input_shape=(look_back, 1)),
-                    tf.keras.layers.LSTM(50),
-                    tf.keras.layers.Dense(25),
-                    tf.keras.layers.Dense(1)
-                ])
+                # Define PyTorch LSTM model
+                class LSTMModel(nn.Module):
+                    def __init__(self, input_dim=1, hidden_dim=50, num_layers=2, output_dim=1):
+                        super(LSTMModel, self).__init__()
+                        self.hidden_dim = hidden_dim
+                        self.num_layers = num_layers
+                        
+                        # LSTM layers
+                        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
+                        
+                        # Fully connected layers
+                        self.fc1 = nn.Linear(hidden_dim, 25)
+                        self.fc2 = nn.Linear(25, output_dim)
+                        self.relu = nn.ReLU()
+                    
+                    def forward(self, x):
+                        # Initialize hidden state with zeros
+                        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(x.device)
+                        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(x.device)
+                        
+                        # Forward propagate LSTM
+                        out, _ = self.lstm(x, (h0, c0))
+                        
+                        # Get the last time step output
+                        out = out[:, -1, :]
+                        
+                        # Fully connected layers
+                        out = self.relu(self.fc1(out))
+                        out = self.fc2(out)
+                        return out
                 
-                # Compile the model
-                model.compile(optimizer='adam', loss='mean_squared_error')
+                # Convert data to PyTorch tensors
+                x_train_tensor = torch.FloatTensor(x_train)
+                y_train_tensor = torch.FloatTensor(y_train)
                 
-                # Train the model with early stopping to prevent overfitting
-                model.fit(
-                    x_train, y_train, 
-                    epochs=25, 
-                    batch_size=32, 
-                    verbose=0,
-                    callbacks=[tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)]
-                )
+                # Initialize model, loss function and optimizer
+                model = LSTMModel()
+                criterion = nn.MSELoss()
+                optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+                
+                # Training loop
+                epochs = 25
+                batch_size = 32
+                n_batches = len(x_train_tensor) // batch_size
+                early_stop_counter = 0
+                best_loss = float('inf')
+                
+                model.train()
+                for epoch in range(epochs):
+                    epoch_loss = 0
+                    
+                    for i in range(n_batches):
+                        start_idx = i * batch_size
+                        end_idx = min(start_idx + batch_size, len(x_train_tensor))
+                        batch_X = x_train_tensor[start_idx:end_idx]
+                        batch_y = y_train_tensor[start_idx:end_idx]
+                        
+                        # Forward pass
+                        outputs = model(batch_X)
+                        loss = criterion(outputs.squeeze(), batch_y)
+                        
+                        # Backward and optimize
+                        optimizer.zero_grad()
+                        loss.backward()
+                        optimizer.step()
+                        
+                        epoch_loss += loss.item()
+                    
+                    avg_loss = epoch_loss / n_batches
+                    
+                    # Early stopping
+                    if avg_loss < best_loss:
+                        best_loss = avg_loss
+                        early_stop_counter = 0
+                    else:
+                        early_stop_counter += 1
+                    
+                    if early_stop_counter >= 5:  # Patience of 5 epochs
+                        break
+                
+                # Set model to evaluation mode
+                model.eval()
                 
                 # Prepare input for prediction
                 inputs = scaled_data[-look_back:].copy()
-                inputs = inputs.reshape(1, look_back, 1)
+                inputs_tensor = torch.FloatTensor(inputs).unsqueeze(0)  # Add batch dimension
                 
                 # Make predictions for forecast_days
                 predicted_prices = []
                 
-                for _ in range(self.forecast_days):
-                    next_pred = model.predict(inputs, verbose=0)[0]
-                    predicted_prices.append(next_pred[0])
-                    
-                    # Update inputs for next prediction
-                    inputs = inputs.reshape(look_back, 1)
-                    inputs = np.append(inputs[1:], [[next_pred[0]]], axis=0)
-                    inputs = inputs.reshape(1, look_back, 1)
+                with torch.no_grad():  # No need to track gradients for inference
+                    for _ in range(self.forecast_days):
+                        # Forward pass
+                        output = model(inputs_tensor)
+                        next_pred = output.detach().numpy()
+                        predicted_prices.append(next_pred[0][0])
+                        
+                        # Update inputs for next prediction
+                        inputs = np.append(inputs[1:], [[next_pred[0][0]]], axis=0)
+                        inputs_tensor = torch.FloatTensor(inputs).unsqueeze(0)
                 
                 # Inverse scaling to get actual prices
                 predicted_prices = np.array(predicted_prices).reshape(-1, 1)
