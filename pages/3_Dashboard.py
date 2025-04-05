@@ -3,9 +3,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
-from dashboard import load_user_data, format_history_data, format_trading_data, create_analysis_trend_chart, create_trading_analysis_chart
-from utils import format_currency, format_percentage, display_error_message, display_info_message
+from dashboard import load_user_data, format_history_data, format_trading_data, format_portfolio_data, format_watchlist_data, create_analysis_trend_chart, create_trading_analysis_chart
+from utils import format_currency, format_percentage, display_error_message, display_info_message, display_success_message
 from auth import is_authenticated
+from database import add_to_watchlist, remove_from_watchlist
 
 # Set page config
 st.set_page_config(
@@ -30,6 +31,8 @@ with st.spinner("Loading your dashboard..."):
     # Format the data
     stock_history = format_history_data(user_data['stock_history']) if 'stock_history' in user_data else pd.DataFrame()
     trading_history = format_trading_data(user_data['trading_history']) if 'trading_history' in user_data else pd.DataFrame()
+    portfolio = format_portfolio_data(user_data['portfolio']) if 'portfolio' in user_data else pd.DataFrame()
+    watchlist = format_watchlist_data(user_data['watchlist']) if 'watchlist' in user_data else pd.DataFrame()
 
 # Dashboard layout
 col1, col2 = st.columns([2, 1])
@@ -140,6 +143,100 @@ if not trading_history.empty:
         display_info_message("Not enough trading data to show analysis charts.")
 else:
     display_info_message("No trading history found. Start executing trades to see data here.")
+
+# Portfolio section
+st.markdown('<h2 class="title-text">Your Portfolio</h2>', unsafe_allow_html=True)
+
+if not portfolio.empty:
+    # Calculate portfolio total value and profit/loss
+    total_invested = portfolio['invested_value'].sum()
+    total_current = portfolio['current_value'].sum()
+    total_profit_loss = portfolio['profit_loss'].sum()
+    profit_loss_pct = (total_profit_loss / total_invested) * 100 if total_invested > 0 else 0
+    
+    # Display portfolio summary
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total Invested", format_currency(total_invested))
+    
+    with col2:
+        st.metric("Current Value", format_currency(total_current))
+    
+    with col3:
+        st.metric("Total Profit/Loss", 
+                 format_currency(total_profit_loss), 
+                 format_percentage(profit_loss_pct))
+    
+    # Display portfolio table
+    st.dataframe(
+        portfolio[['stock_symbol', 'quantity', 'average_buy_price', 'current_price', 'current_value', 'profit_loss', 'profit_loss_pct']],
+        column_config={
+            "stock_symbol": "Stock",
+            "quantity": "Quantity",
+            "average_buy_price": st.column_config.NumberColumn("Avg. Buy Price", format="₹%.2f"),
+            "current_price": st.column_config.NumberColumn("Current Price", format="₹%.2f"),
+            "current_value": st.column_config.NumberColumn("Current Value", format="₹%.2f"),
+            "profit_loss": st.column_config.NumberColumn("Profit/Loss", format="₹%.2f"),
+            "profit_loss_pct": st.column_config.NumberColumn("P/L %", format="%.2f%%")
+        },
+        hide_index=True
+    )
+    
+    # Portfolio composition
+    st.markdown('<h3 class="title-text">Portfolio Composition</h3>', unsafe_allow_html=True)
+    
+    fig = px.pie(
+        portfolio, 
+        values='current_value', 
+        names='stock_symbol',
+        title='Portfolio Allocation',
+        color_discrete_sequence=px.colors.sequential.Blues_r
+    )
+    
+    fig.update_traces(textposition='inside', textinfo='percent+label')
+    st.plotly_chart(fig, use_container_width=True)
+    
+else:
+    display_info_message("Your portfolio is empty. Start trading to build your portfolio.")
+
+# Watchlist section
+st.markdown('<h2 class="title-text">Your Watchlist</h2>', unsafe_allow_html=True)
+
+# Add to watchlist form
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    with st.form("add_watchlist_form", clear_on_submit=True):
+        stock_symbol = st.text_input("Enter stock symbol to add to watchlist:", max_chars=10)
+        submitted = st.form_submit_button("Add to Watchlist")
+        
+        if submitted and stock_symbol:
+            success = add_to_watchlist(st.session_state.user_id, stock_symbol.upper())
+            if success:
+                st.rerun()  # Refresh the page to show updated watchlist
+
+if not watchlist.empty:
+    # Display watchlist table
+    watchlist_df = st.dataframe(
+        watchlist[['stock_symbol', 'current_price', 'formatted_date']],
+        column_config={
+            "stock_symbol": "Stock",
+            "current_price": st.column_config.NumberColumn("Current Price", format="₹%.2f"),
+            "formatted_date": "Date Added"
+        },
+        hide_index=True
+    )
+    
+    # Remove from watchlist
+    stock_to_remove = st.selectbox("Select stock to remove from watchlist:", watchlist['stock_symbol'].tolist())
+    if st.button("Remove from Watchlist"):
+        success = remove_from_watchlist(st.session_state.user_id, stock_to_remove)
+        if success:
+            display_success_message(f"Removed {stock_to_remove} from watchlist.")
+            st.rerun()  # Refresh the page to show updated watchlist
+else:
+    display_info_message("Your watchlist is empty. Add stocks to track them.")
 
 # Tips and recommendations
 st.markdown('<h2 class="title-text">Tips & Recommendations</h2>', unsafe_allow_html=True)

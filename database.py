@@ -8,6 +8,15 @@ import json
 # Database path
 DB_PATH = "stockapp.db"
 
+# Initialize database when this module is imported
+if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
+    print("Creating new database file...")
+else:
+    print(f"Using existing database at {DB_PATH}")
+
+# Create tables at module import time
+initialize_database_called = False
+
 def get_db_connection():
     """Create a connection to the SQLite database"""
     conn = sqlite3.connect(DB_PATH)
@@ -16,6 +25,12 @@ def get_db_connection():
 
 def initialize_database():
     """Initialize the database with necessary tables if they don't exist."""
+    global initialize_database_called
+    
+    # Return if already initialized to prevent multiple calls
+    if initialize_database_called:
+        return
+        
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -60,8 +75,37 @@ def initialize_database():
     )
     ''')
     
+    # Create portfolio table for tracking user holdings
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS portfolio (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        stock_symbol TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        average_buy_price REAL NOT NULL,
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        UNIQUE(user_id, stock_symbol)
+    )
+    ''')
+    
+    # Create watchlist table for users to track favorite stocks
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS watchlist (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        stock_symbol TEXT NOT NULL,
+        added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        UNIQUE(user_id, stock_symbol)
+    )
+    ''')
+    
     conn.commit()
     conn.close()
+    
+    initialize_database_called = True
+    print("Database tables initialized")
 
 def add_user(username, email, password):
     """Add a new user to the database."""
@@ -215,3 +259,219 @@ def get_user_trading_history(user_id, limit=50):
             'id', 'user_id', 'stock_symbol', 'transaction_type', 'quantity',
             'price', 'transaction_date', 'tax_amount', 'total_amount'
         ])
+
+def add_to_portfolio(user_id, stock_symbol, quantity, buy_price):
+    """
+    Add or update stocks in user portfolio
+    
+    Parameters:
+    - user_id: User ID
+    - stock_symbol: Stock symbol
+    - quantity: Quantity to add (positive) or remove (negative)
+    - buy_price: Purchase price (used for average calculation)
+    
+    Returns:
+    - Boolean indicating success
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if stock already exists in portfolio
+        cursor.execute(
+            "SELECT quantity, average_buy_price FROM portfolio WHERE user_id = ? AND stock_symbol = ?",
+            (user_id, stock_symbol)
+        )
+        
+        result = cursor.fetchone()
+        
+        if result:
+            # Stock exists, update quantity and average price
+            current_quantity = result['quantity']
+            current_avg_price = result['average_buy_price']
+            
+            if quantity > 0:
+                # Buying more shares - update average price
+                new_quantity = current_quantity + quantity
+                new_avg_price = ((current_quantity * current_avg_price) + (quantity * buy_price)) / new_quantity
+                
+                cursor.execute(
+                    """
+                    UPDATE portfolio 
+                    SET quantity = ?, average_buy_price = ?, last_updated = CURRENT_TIMESTAMP
+                    WHERE user_id = ? AND stock_symbol = ?
+                    """,
+                    (new_quantity, new_avg_price, user_id, stock_symbol)
+                )
+            else:
+                # Selling shares - keep same average price but reduce quantity
+                new_quantity = current_quantity + quantity  # quantity is negative for selling
+                
+                if new_quantity <= 0:
+                    # Remove from portfolio if all shares sold
+                    cursor.execute(
+                        "DELETE FROM portfolio WHERE user_id = ? AND stock_symbol = ?",
+                        (user_id, stock_symbol)
+                    )
+                else:
+                    # Update with reduced quantity
+                    cursor.execute(
+                        """
+                        UPDATE portfolio 
+                        SET quantity = ?, last_updated = CURRENT_TIMESTAMP
+                        WHERE user_id = ? AND stock_symbol = ?
+                        """,
+                        (new_quantity, user_id, stock_symbol)
+                    )
+        else:
+            # New stock, only insert if buying (positive quantity)
+            if quantity > 0:
+                cursor.execute(
+                    """
+                    INSERT INTO portfolio (user_id, stock_symbol, quantity, average_buy_price)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (user_id, stock_symbol, quantity, buy_price)
+                )
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Error updating portfolio: {e}")
+        return False
+
+def get_user_portfolio(user_id):
+    """
+    Get user's portfolio
+    
+    Parameters:
+    - user_id: User ID
+    
+    Returns:
+    - DataFrame with portfolio data
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        """
+        SELECT * FROM portfolio 
+        WHERE user_id = ? 
+        ORDER BY stock_symbol
+        """,
+        (user_id,)
+    )
+    
+    results = cursor.fetchall()
+    conn.close()
+    
+    # Convert to DataFrame
+    if results:
+        # Convert rows to dictionaries
+        portfolio = [dict(row) for row in results]
+        return pd.DataFrame(portfolio)
+    else:
+        return pd.DataFrame(columns=[
+            'id', 'user_id', 'stock_symbol', 'quantity',
+            'average_buy_price', 'last_updated'
+        ])
+
+def add_to_watchlist(user_id, stock_symbol):
+    """
+    Add stock to user's watchlist
+    
+    Parameters:
+    - user_id: User ID
+    - stock_symbol: Stock symbol
+    
+    Returns:
+    - Boolean indicating success
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Use INSERT OR IGNORE to handle duplicates
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO watchlist (user_id, stock_symbol)
+            VALUES (?, ?)
+            """,
+            (user_id, stock_symbol)
+        )
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Error adding to watchlist: {e}")
+        return False
+
+def remove_from_watchlist(user_id, stock_symbol):
+    """
+    Remove stock from user's watchlist
+    
+    Parameters:
+    - user_id: User ID
+    - stock_symbol: Stock symbol
+    
+    Returns:
+    - Boolean indicating success
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            """
+            DELETE FROM watchlist
+            WHERE user_id = ? AND stock_symbol = ?
+            """,
+            (user_id, stock_symbol)
+        )
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Error removing from watchlist: {e}")
+        return False
+
+def get_user_watchlist(user_id):
+    """
+    Get user's watchlist
+    
+    Parameters:
+    - user_id: User ID
+    
+    Returns:
+    - DataFrame with watchlist data
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        """
+        SELECT * FROM watchlist 
+        WHERE user_id = ? 
+        ORDER BY added_date DESC
+        """,
+        (user_id,)
+    )
+    
+    results = cursor.fetchall()
+    conn.close()
+    
+    # Convert to DataFrame
+    if results:
+        # Convert rows to dictionaries
+        watchlist = [dict(row) for row in results]
+        return pd.DataFrame(watchlist)
+    else:
+        return pd.DataFrame(columns=[
+            'id', 'user_id', 'stock_symbol', 'added_date'
+        ])
+
+# Initialize database tables when this module is imported
+initialize_database()

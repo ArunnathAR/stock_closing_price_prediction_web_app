@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from database import save_trading_transaction
+from database import save_trading_transaction, add_to_portfolio
 from stock_data import get_current_price
 
 def calculate_tax(transaction_type, price, quantity, short_term=True):
@@ -173,9 +173,11 @@ def execute_trade(user_id, stock_symbol, transaction_type, quantity, price):
         if transaction_type.lower() == 'buy':
             total_amount = tax_info['total_cost']
             tax_amount = tax_info['total_tax']
+            portfolio_quantity = quantity  # Positive for buying
         else:
             total_amount = tax_info['net_proceed']
             tax_amount = tax_info['total_tax']
+            portfolio_quantity = -quantity  # Negative for selling
         
         # Save transaction to database
         success = save_trading_transaction(
@@ -187,6 +189,18 @@ def execute_trade(user_id, stock_symbol, transaction_type, quantity, price):
             tax_amount, 
             total_amount
         )
+        
+        if success:
+            # Update portfolio
+            portfolio_success = add_to_portfolio(
+                user_id,
+                stock_symbol,
+                portfolio_quantity,
+                price
+            )
+            
+            if not portfolio_success:
+                st.warning("Transaction recorded but portfolio update failed.")
         
         return success
     

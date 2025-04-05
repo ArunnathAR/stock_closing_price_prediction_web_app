@@ -3,7 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
-from database import get_user_stock_history, get_user_trading_history
+from database import get_user_stock_history, get_user_trading_history, get_user_portfolio, get_user_watchlist
+from stock_data import get_current_price
 
 def load_user_data(user_id):
     """
@@ -21,10 +22,18 @@ def load_user_data(user_id):
     # Get trading history
     trading_history = get_user_trading_history(user_id)
     
+    # Get portfolio
+    portfolio = get_user_portfolio(user_id)
+    
+    # Get watchlist
+    watchlist = get_user_watchlist(user_id)
+    
     # Return data
     return {
         'stock_history': stock_history,
-        'trading_history': trading_history
+        'trading_history': trading_history,
+        'portfolio': portfolio,
+        'watchlist': watchlist
     }
 
 def format_history_data(stock_history):
@@ -193,3 +202,87 @@ def create_trading_analysis_chart(trading_history):
     )
     
     return fig1, fig2
+
+def format_portfolio_data(portfolio):
+    """
+    Format portfolio data with current prices and profit/loss calculations
+    
+    Parameters:
+    - portfolio: DataFrame with portfolio data
+    
+    Returns:
+    - Formatted DataFrame with current prices and P/L
+    """
+    if portfolio is None or portfolio.empty:
+        return pd.DataFrame()
+    
+    # Create a copy to avoid modifying the original
+    df = portfolio.copy()
+    
+    # Add current prices and calculate P/L
+    current_prices = {}
+    for index, row in df.iterrows():
+        try:
+            # Get current price (with cache to avoid multiple API calls for same symbol)
+            symbol = row['stock_symbol']
+            if symbol not in current_prices:
+                current_prices[symbol] = get_current_price(symbol)
+            
+            current_price = current_prices[symbol]
+            
+            # Calculate values
+            df.at[index, 'current_price'] = current_price
+            df.at[index, 'current_value'] = current_price * row['quantity']
+            df.at[index, 'invested_value'] = row['average_buy_price'] * row['quantity']
+            df.at[index, 'profit_loss'] = df.at[index, 'current_value'] - df.at[index, 'invested_value']
+            df.at[index, 'profit_loss_pct'] = (df.at[index, 'profit_loss'] / df.at[index, 'invested_value']) * 100
+        except Exception as e:
+            # Handle any errors gracefully
+            st.warning(f"Error getting current price for {row['stock_symbol']}: {e}")
+            df.at[index, 'current_price'] = None
+            df.at[index, 'current_value'] = None
+            df.at[index, 'profit_loss'] = None
+            df.at[index, 'profit_loss_pct'] = None
+    
+    # Format the date
+    if 'last_updated' in df.columns:
+        df['last_updated'] = pd.to_datetime(df['last_updated'])
+        df['formatted_date'] = df['last_updated'].dt.strftime('%b %d, %Y')
+    
+    return df
+
+def format_watchlist_data(watchlist):
+    """
+    Format watchlist data with current prices
+    
+    Parameters:
+    - watchlist: DataFrame with watchlist data
+    
+    Returns:
+    - Formatted DataFrame with current prices
+    """
+    if watchlist is None or watchlist.empty:
+        return pd.DataFrame()
+    
+    # Create a copy to avoid modifying the original
+    df = watchlist.copy()
+    
+    # Add current prices
+    for index, row in df.iterrows():
+        try:
+            # Get current price
+            symbol = row['stock_symbol']
+            current_price = get_current_price(symbol)
+            
+            df.at[index, 'current_price'] = current_price
+        except Exception as e:
+            # Handle any errors gracefully
+            st.warning(f"Error getting current price for {row['stock_symbol']}: {e}")
+            df.at[index, 'current_price'] = None
+    
+    # Format the date
+    if 'added_date' in df.columns:
+        df['added_date'] = pd.to_datetime(df['added_date'])
+        df['formatted_date'] = df['added_date'].dt.strftime('%b %d, %Y')
+    
+    return df
