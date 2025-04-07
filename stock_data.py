@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-import streamlit as st
 import requests
 from datetime import datetime, timedelta
 
@@ -22,7 +21,7 @@ NIFTY50_STOCKS = [
     "HINDALCO.BSE", "EICHERMOT.BSE", "SBILIFE.BSE", "BAJAJ-AUTO.BSE", "TATACONSUM.BSE"
 ]
 
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+# Cache for 1 hour
 def get_stock_data(symbol, period='1month'):
     """
     Fetch stock data from Alpha Vantage API
@@ -56,11 +55,11 @@ def get_stock_data(symbol, period='1month'):
         data = response.json()
         
         if "Error Message" in data:
-            st.error(f"API Error: {data['Error Message']}")
+            print(f"API Error: {data['Error Message']}")
             return None
         
         if "Time Series (Daily)" not in data:
-            st.error("No time series data found. Please check the stock symbol.")
+            print("No time series data found. Please check the stock symbol.")
             return None
         
         # Extract time series data
@@ -103,10 +102,10 @@ def get_stock_data(symbol, period='1month'):
         return df
     
     except Exception as e:
-        st.error(f"Error fetching stock data: {e}")
+        print(f"Error fetching stock data: {e}")
         return None
 
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+# Cache for 1 hour
 def get_stock_overview(symbol):
     """
     Fetch stock overview information from Alpha Vantage API
@@ -133,13 +132,13 @@ def get_stock_overview(symbol):
         data = response.json()
         
         if "Error Message" in data:
-            st.error(f"API Error: {data['Error Message']}")
+            print(f"API Error: {data['Error Message']}")
             return None
         
         return data
     
     except Exception as e:
-        st.error(f"Error fetching stock overview: {e}")
+        print(f"Error fetching stock overview: {e}")
         return None
 
 def calculate_technical_indicators(df):
@@ -213,11 +212,11 @@ def get_current_price(symbol):
         data = response.json()
         
         if "Error Message" in data:
-            st.error(f"API Error: {data['Error Message']}")
+            print(f"API Error: {data['Error Message']}")
             return None
         
         if "Global Quote" not in data or not data["Global Quote"]:
-            st.error("No quote data found. Please check the stock symbol.")
+            print("No quote data found. Please check the stock symbol.")
             return None
         
         # Extract current price
@@ -225,5 +224,5 @@ def get_current_price(symbol):
         return current_price
     
     except Exception as e:
-        st.error(f"Error fetching current price: {e}")
+        print(f"Error fetching current price: {e}")
         return None
