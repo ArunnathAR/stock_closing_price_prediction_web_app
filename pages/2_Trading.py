@@ -24,26 +24,42 @@ if not is_authenticated():
 st.markdown('<h1 class="title-text">Trading Interface</h1>', unsafe_allow_html=True)
 st.markdown('<p class="body-text">Simulate trades and calculate taxes</p>', unsafe_allow_html=True)
 
-# Stock selection
-col1, col2 = st.columns([2, 1])
+# Check if coming from analysis page
+if 'from_analysis' in st.session_state and st.session_state.from_analysis:
+    # Use stock and transaction type from session state
+    selected_stock = st.session_state.trade_stock
+    selected_stock_display = selected_stock.split('.')[0]
+    transaction_type = st.session_state.trade_type.capitalize()
+    
+    # Reset the flag
+    st.session_state.from_analysis = False
+    
+    st.info(f"Transaction initiated from Stock Analysis page for {selected_stock_display}")
+else:
+    # Stock selection
+    col1, col2 = st.columns([2, 1])
 
-with col1:
-    # Clean up stock symbols for display
-    display_stocks = [stock.split('.')[0] for stock in NIFTY50_STOCKS]
-    selected_stock_display = st.selectbox("Select a stock", display_stocks)
-    # Get the full symbol for API call
-    selected_stock = NIFTY50_STOCKS[display_stocks.index(selected_stock_display)]
+    with col1:
+        # Clean up stock symbols for display
+        display_stocks = [stock.split('.')[0] for stock in NIFTY50_STOCKS]
+        selected_stock_display = st.selectbox("Select a stock", display_stocks)
+        # Get the full symbol for API call
+        selected_stock = NIFTY50_STOCKS[display_stocks.index(selected_stock_display)]
 
-with col2:
-    transaction_type = st.selectbox(
-        "Transaction Type",
-        options=["Buy", "Sell"],
-        index=0
-    )
+    with col2:
+        transaction_type = st.selectbox(
+            "Transaction Type",
+            options=["Buy", "Sell"],
+            index=0
+        )
 
 # Fetch current price
 with st.spinner("Fetching current price..."):
-    current_price = get_current_price(selected_stock)
+    # Check if price is passed from analysis page
+    if 'from_analysis' in st.session_state and 'trade_price' in st.session_state:
+        current_price = st.session_state.trade_price
+    else:
+        current_price = get_current_price(selected_stock)
     
     if current_price is None:
         display_error_message("Unable to fetch current price. Please try again later.")

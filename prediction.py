@@ -420,20 +420,48 @@ class StockPredictor:
                 'ensemble': '#5D6D7E' # Chart neutral
             }
             
+            # First add the individual model predictions with dashed lines
             for model in ensemble_pred.columns:
-                if model in colors:
-                    line_style = 'solid' if model == 'ensemble' else 'dash'
-                    width = 3 if model == 'ensemble' else 2
-                    
+                if model in colors and model != 'ensemble':
                     fig.add_trace(
                         go.Scatter(
                             x=ensemble_pred.index,
                             y=ensemble_pred[model],
                             mode='lines',
                             name=f'{model} Prediction',
-                            line=dict(color=colors[model], width=width, dash=line_style)
+                            line=dict(color=colors[model], width=1.5, dash='dash'),
+                            visible='legendonly'  # Hide by default, can be toggled
                         )
                     )
+            
+            # Add ensemble prediction with solid line
+            if 'ensemble' in ensemble_pred.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=ensemble_pred.index,
+                        y=ensemble_pred['ensemble'],
+                        mode='lines',
+                        name='Ensemble Prediction',
+                        line=dict(color=colors['ensemble'], width=3)
+                    )
+                )
+                
+                # Add predicted price annotations at 7, 14 and 30 days
+                for day, period in [(6, '7 days'), (13, '14 days'), (29, '30 days')]:
+                    if day < len(ensemble_pred):
+                        fig.add_annotation(
+                            x=ensemble_pred.index[day],
+                            y=ensemble_pred['ensemble'].iloc[day],
+                            text=f"₹{ensemble_pred['ensemble'].iloc[day]:.2f}",
+                            showarrow=True,
+                            arrowhead=1,
+                            arrowsize=1,
+                            arrowwidth=2,
+                            arrowcolor="#5D6D7E",
+                            ax=0,
+                            ay=-40,
+                            font=dict(size=12, color="#5D6D7E")
+                        )
             
             # Update layout
             fig.update_layout(
@@ -456,6 +484,17 @@ class StockPredictor:
                 line_color="gray",
                 annotation_text="Prediction Start",
                 annotation_position="top right"
+            )
+            
+            # Add horizontal line for current price
+            current_price = historical['close'].iloc[0]  # Most recent price
+            fig.add_hline(
+                y=current_price,
+                line_width=1,
+                line_dash="dot",
+                line_color="rgba(0,0,0,0.3)",
+                annotation_text="Current Price",
+                annotation_position="bottom right"
             )
             
             return fig

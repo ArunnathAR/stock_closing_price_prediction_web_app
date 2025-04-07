@@ -233,6 +233,38 @@ with loading_spinner("Generating price predictions..."):
         # Display recommendation
         create_recommendation_box(recommendation, explanation)
         
+        # Add trading buttons based on recommendation
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col1:
+            if st.button("Buy", type="primary" if recommendation == "buy" else "secondary"):
+                # Store details in session state for trading page
+                st.session_state.trade_stock = selected_stock
+                st.session_state.trade_price = current_price
+                st.session_state.trade_type = "buy"
+                st.session_state.from_analysis = True
+                # Redirect to trading page
+                st.switch_page("pages/2_Trading.py")
+        
+        with col2:
+            if st.button("Sell", type="primary" if recommendation == "sell" else "secondary"):
+                # Store details in session state for trading page
+                st.session_state.trade_stock = selected_stock
+                st.session_state.trade_price = current_price
+                st.session_state.trade_type = "sell"
+                st.session_state.from_analysis = True
+                # Redirect to trading page
+                st.switch_page("pages/2_Trading.py")
+        
+        with col3:
+            if st.button("Add to Watchlist"):
+                # Logic to add to watchlist will be implemented
+                from database import add_to_watchlist
+                if add_to_watchlist(st.session_state.user_id, selected_stock):
+                    st.success(f"{selected_stock_display} added to watchlist!")
+                else:
+                    st.error("Failed to add to watchlist or already in watchlist")
+        
         # Save analysis to database if user is authenticated
         if st.session_state.user_id:
             # Convert ensemble predictions to string for storage
