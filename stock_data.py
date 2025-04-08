@@ -1,144 +1,130 @@
-import os
 import pandas as pd
 import numpy as np
-import requests
+import yfinance as yf
 from datetime import datetime, timedelta
+import functools
+import time
 
-# Alpha Vantage API key from environment
-ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY", "demo")
+# Cache for data fetching (1 hour expiry)
+def timed_lru_cache(seconds=3600, maxsize=128):
+    def wrapper_cache(func):
+        func = functools.lru_cache(maxsize=maxsize)(func)
+        func.lifetime = seconds
+        func.expiration = time.time() + seconds
+        
+        @functools.wraps(func)
+        def wrapped_func(*args, **kwargs):
+            if time.time() > func.expiration:
+                func.cache_clear()
+                func.expiration = time.time() + func.lifetime
+            return func(*args, **kwargs)
+        
+        return wrapped_func
+    
+    return wrapper_cache
 
-# Nifty 50 stocks list
+# Nifty 50 stocks list (with Yahoo Finance symbols)
 NIFTY50_STOCKS = [
-    "RELIANCE.BSE", "TCS.BSE", "HDFCBANK.BSE", "ICICIBANK.BSE", "HINDUNILVR.BSE",
-    "INFY.BSE", "HDFC.BSE", "KOTAKBANK.BSE", "ITC.BSE", "SBIN.BSE",
-    "BHARTIARTL.BSE", "BAJFINANCE.BSE", "LT.BSE", "ASIANPAINT.BSE", "AXISBANK.BSE",
-    "WIPRO.BSE", "MARUTI.BSE", "ULTRACEMCO.BSE", "TITAN.BSE", "BAJAJFINSV.BSE",
-    "HCLTECH.BSE", "SUNPHARMA.BSE", "TATASTEEL.BSE", "M&M.BSE", "TECHM.BSE",
-    "NTPC.BSE", "POWERGRID.BSE", "NESTLEIND.BSE", "JSWSTEEL.BSE", "DRREDDY.BSE",
-    "HDFCLIFE.BSE", "IOC.BSE", "CIPLA.BSE", "ONGC.BSE", "DIVISLAB.BSE",
-    "COALINDIA.BSE", "GRASIM.BSE", "BPCL.BSE", "UPL.BSE", "SHREECEM.BSE",
-    "HEROMOTOCO.BSE", "TATAMOTORS.BSE", "ADANIPORTS.BSE", "INDUSINDBK.BSE", "BRITANNIA.BSE",
-    "HINDALCO.BSE", "EICHERMOT.BSE", "SBILIFE.BSE", "BAJAJ-AUTO.BSE", "TATACONSUM.BSE"
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "HINDUNILVR.NS",
+    "INFY.NS", "HDFC.NS", "KOTAKBANK.NS", "ITC.NS", "SBIN.NS",
+    "BHARTIARTL.NS", "BAJFINANCE.NS", "LT.NS", "ASIANPAINT.NS", "AXISBANK.NS",
+    "WIPRO.NS", "MARUTI.NS", "ULTRACEMCO.NS", "TITAN.NS", "BAJAJFINSV.NS",
+    "HCLTECH.NS", "SUNPHARMA.NS", "TATASTEEL.NS", "M&M.NS", "TECHM.NS",
+    "NTPC.NS", "POWERGRID.NS", "NESTLEIND.NS", "JSWSTEEL.NS", "DRREDDY.NS",
+    "HDFCLIFE.NS", "IOC.NS", "CIPLA.NS", "ONGC.NS", "DIVISLAB.NS",
+    "COALINDIA.NS", "GRASIM.NS", "BPCL.NS", "UPL.NS", "SHREECEM.NS",
+    "HEROMOTOCO.NS", "TATAMOTORS.NS", "ADANIPORTS.NS", "INDUSINDBK.NS", "BRITANNIA.NS",
+    "HINDALCO.NS", "EICHERMOT.NS", "SBILIFE.NS", "BAJAJ-AUTO.NS", "TATACONSUM.NS"
 ]
 
-# Cache for 1 hour
+@timed_lru_cache(seconds=3600)
 def get_stock_data(symbol, period='1month'):
     """
-    Fetch stock data from Alpha Vantage API
+    Fetch stock data using yfinance
     
     Parameters:
-    - symbol: Stock symbol
+    - symbol: Stock symbol (Yahoo Finance format)
     - period: Time period ('1month', '3month', '5month')
     
     Returns:
     - Pandas DataFrame with stock data
     """
     try:
+        # Map period to yfinance period format
         if period == '1month':
-            outputsize = "compact"  # Last 100 data points
+            yf_period = '1mo'
+            interval = '1d'
+        elif period == '3month':
+            yf_period = '3mo'
+            interval = '1d'
+        elif period == '5month':
+            yf_period = '5mo'
+            interval = '1d'
         else:
-            outputsize = "full"  # Full data
-
-        # Base URL for API request
-        base_url = "https://www.alphavantage.co/query"
+            yf_period = '1mo'  # Default
+            interval = '1d'
         
-        # Parameters for API request
-        params = {
-            "function": "TIME_SERIES_DAILY",
-            "symbol": symbol,
-            "outputsize": outputsize,
-            "apikey": ALPHA_VANTAGE_API_KEY
-        }
+        # Fetch data using yfinance
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period=yf_period, interval=interval)
         
-        # Make API request
-        response = requests.get(base_url, params=params)
-        data = response.json()
-        
-        if "Error Message" in data:
-            print(f"API Error: {data['Error Message']}")
+        if df.empty:
+            print(f"No data found for {symbol}")
             return None
         
-        if "Time Series (Daily)" not in data:
-            print("No time series data found. Please check the stock symbol.")
-            return None
-        
-        # Extract time series data
-        time_series = data["Time Series (Daily)"]
-        
-        # Convert to DataFrame
-        df = pd.DataFrame.from_dict(time_series, orient='index')
-        
-        # Rename columns
+        # Rename columns to match expected format
         df.rename(columns={
-            '1. open': 'open',
-            '2. high': 'high',
-            '3. low': 'low',
-            '4. close': 'close',
-            '5. volume': 'volume'
+            'Open': 'open',
+            'High': 'high',
+            'Low': 'low',
+            'Close': 'close',
+            'Volume': 'volume'
         }, inplace=True)
-        
-        # Convert index to datetime
-        df.index = pd.to_datetime(df.index)
         
         # Sort by date (newest first)
         df.sort_index(ascending=False, inplace=True)
         
-        # Convert columns to numeric
-        for col in df.columns:
-            df[col] = pd.to_numeric(df[col])
-        
-        # Filter based on period
-        if period == '1month':
-            start_date = datetime.now() - timedelta(days=30)
-        elif period == '3month':
-            start_date = datetime.now() - timedelta(days=90)
-        elif period == '5month':
-            start_date = datetime.now() - timedelta(days=150)
-        else:
-            start_date = datetime.now() - timedelta(days=30)  # Default to 1 month
-        
-        df = df[df.index >= start_date]
-        
         return df
     
     except Exception as e:
-        print(f"Error fetching stock data: {e}")
+        print(f"Error fetching stock data for {symbol}: {e}")
         return None
 
-# Cache for 1 hour
+@timed_lru_cache(seconds=3600)
 def get_stock_overview(symbol):
     """
-    Fetch stock overview information from Alpha Vantage API
+    Fetch stock overview information
     
     Parameters:
-    - symbol: Stock symbol
+    - symbol: Stock symbol (Yahoo Finance format)
     
     Returns:
     - Dictionary with stock overview data
     """
     try:
-        # Base URL for API request
-        base_url = "https://www.alphavantage.co/query"
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
         
-        # Parameters for API request
-        params = {
-            "function": "OVERVIEW",
-            "symbol": symbol,
-            "apikey": ALPHA_VANTAGE_API_KEY
+        # Create a standardized overview dict
+        overview = {
+            'Symbol': symbol,
+            'Name': info.get('shortName', ''),
+            'Description': info.get('longBusinessSummary', ''),
+            'Sector': info.get('sector', ''),
+            'Industry': info.get('industry', ''),
+            'MarketCap': info.get('marketCap', 0),
+            'PERatio': info.get('trailingPE', 0),
+            'EPS': info.get('trailingEps', 0),
+            'DividendYield': info.get('dividendYield', 0) * 100 if info.get('dividendYield') else 0,
+            '52WeekHigh': info.get('fiftyTwoWeekHigh', 0),
+            '52WeekLow': info.get('fiftyTwoWeekLow', 0),
+            'AnalystTarget': info.get('targetMeanPrice', 0),
         }
         
-        # Make API request
-        response = requests.get(base_url, params=params)
-        data = response.json()
-        
-        if "Error Message" in data:
-            print(f"API Error: {data['Error Message']}")
-            return None
-        
-        return data
+        return overview
     
     except Exception as e:
-        print(f"Error fetching stock overview: {e}")
+        print(f"Error fetching stock overview for {symbol}: {e}")
         return None
 
 def calculate_technical_indicators(df):
@@ -191,38 +177,23 @@ def get_current_price(symbol):
     Get the current stock price
     
     Parameters:
-    - symbol: Stock symbol
+    - symbol: Stock symbol (Yahoo Finance format)
     
     Returns:
     - Current stock price (float)
     """
     try:
-        # Base URL for API request
-        base_url = "https://www.alphavantage.co/query"
+        ticker = yf.Ticker(symbol)
+        ticker_data = ticker.history(period='1d')
         
-        # Parameters for API request
-        params = {
-            "function": "GLOBAL_QUOTE",
-            "symbol": symbol,
-            "apikey": ALPHA_VANTAGE_API_KEY
-        }
-        
-        # Make API request
-        response = requests.get(base_url, params=params)
-        data = response.json()
-        
-        if "Error Message" in data:
-            print(f"API Error: {data['Error Message']}")
+        if ticker_data.empty:
+            print(f"No data found for {symbol}")
             return None
         
-        if "Global Quote" not in data or not data["Global Quote"]:
-            print("No quote data found. Please check the stock symbol.")
-            return None
-        
-        # Extract current price
-        current_price = float(data["Global Quote"]["05. price"])
-        return current_price
+        # Get the latest close price
+        current_price = ticker_data['Close'].iloc[-1]
+        return float(current_price)
     
     except Exception as e:
-        print(f"Error fetching current price: {e}")
+        print(f"Error fetching current price for {symbol}: {e}")
         return None

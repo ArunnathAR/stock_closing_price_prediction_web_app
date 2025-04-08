@@ -1,139 +1,120 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import { authAPI } from '../services/api';
 
+// Create the context
 const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
-
+// Create a provider component
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [isAuthenticated, setIsAuthenticated] = useState(!!token);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Initialize auth state
   useEffect(() => {
-    // Check if token exists and validate it
-    const validateToken = async () => {
-      if (token) {
-        try {
-          // Could add a verify endpoint to check token validity
-          setIsAuthenticated(true);
-          
-          // Get user data from token
-          const userDataString = localStorage.getItem('userData');
-          if (userDataString) {
-            setCurrentUser(JSON.parse(userDataString));
-          }
-        } catch (error) {
-          console.error('Token validation error:', error);
-          logout();
-        }
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    
+    if (token && userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (err) {
+        console.error('Failed to parse user data', err);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
       }
-      setLoading(false);
-    };
-
-    validateToken();
-  }, [token]);
-
-  // Register new user
-  const register = async (username, email, password) => {
-    try {
-      const response = await axios.post('/api/auth/register', {
-        username,
-        email,
-        password
-      });
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Registration error:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.detail || 'Registration failed. Please try again.' 
-      };
     }
-  };
+    
+    setLoading(false);
+  }, []);
 
-  // Login user
+  // Login function
   const login = async (username, password) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      const response = await axios.post('/api/auth/login', {
-        username,
-        password
-      });
-      
+      const response = await authAPI.login(username, password);
       const { token, user_id, username: userName } = response.data;
       
-      // Save token and user data
+      const userData = { id: user_id, username: userName };
+      
+      // Save to localStorage
       localStorage.setItem('token', token);
-      localStorage.setItem('userData', JSON.stringify({ 
-        id: user_id, 
-        username: userName 
-      }));
+      localStorage.setItem('user', JSON.stringify(userData));
       
-      // Update context
-      setToken(token);
-      setCurrentUser({ id: user_id, username: userName });
-      setIsAuthenticated(true);
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Login error:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.detail || 'Login failed. Please check your credentials.' 
-      };
+      setUser(userData);
+      return true;
+    } catch (err) {
+      console.error('Login failed', err);
+      setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
+      return false;
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Logout user
-  const logout = async () => {
+  // Register function
+  const register = async (username, email, password) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      if (token) {
-        // Call logout API
-        await axios.post('/api/auth/logout', {}, {
-          params: { token }
-        });
-      }
-    } catch (error) {
-      console.error('Logout error:', error);
+      const response = await authAPI.register(username, email, password);
+      return true;
+    } catch (err) {
+      console.error('Registration failed', err);
+      setError(err.response?.data?.detail || 'Registration failed. Please try a different username.');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Logout function
+  const logout = async () => {
+    setLoading(true);
+    
+    try {
+      // Call logout API
+      await authAPI.logout();
+    } catch (err) {
+      console.error('Logout error', err);
     } finally {
       // Clear local storage and state
       localStorage.removeItem('token');
-      localStorage.removeItem('userData');
-      setToken(null);
-      setCurrentUser(null);
-      setIsAuthenticated(false);
+      localStorage.removeItem('user');
+      setUser(null);
+      setLoading(false);
     }
   };
 
-  // Set authentication headers for axios
-  useEffect(() => {
-    const setAuthHeader = () => {
-      if (token) {
-        axios.defaults.params = { 
-          ...axios.defaults.params,
-          token
-        };
-      } else {
-        delete axios.defaults.params?.token;
-      }
-    };
-
-    setAuthHeader();
-  }, [token]);
-
-  const value = {
-    currentUser,
-    isAuthenticated,
-    loading,
-    register,
-    login,
-    logout
+  // Check if user is authenticated
+  const isAuthenticated = () => {
+    return !!user;
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
+  // Context value
+  const value = {
+    user,
+    loading,
+    error,
+    login,
+    register,
+    logout,
+    isAuthenticated,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+// Custom hook to use the auth context
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+export default AuthContext;

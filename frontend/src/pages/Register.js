@@ -7,151 +7,185 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const validateEmail = (email) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Reset error state
     setError('');
     
-    // Validate inputs
-    if (!username.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
-      setError('Please fill in all fields');
-      return;
-    }
-    
+    // Validate passwords match
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('Passwords do not match.');
       return;
     }
     
+    // Validate password strength
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
+      setError('Password must be at least 8 characters long.');
       return;
     }
     
-    if (!validateEmail(email)) {
-      setError('Please enter a valid email address');
-      return;
-    }
+    setLoading(true);
     
     try {
-      setLoading(true);
-      const result = await register(username, email, password);
-      
-      if (result.success) {
-        // Redirect to login page after successful registration
-        navigate('/login', { state: { message: 'Registration successful! Please log in.' } });
+      const success = await register(username, email, password);
+      if (success) {
+        // Redirect to login page on successful registration
+        navigate('/login', { state: { message: 'Registration successful! Please login with your new account.' } });
       } else {
-        setError(result.error);
+        setError('Failed to register. Username may already be taken.');
       }
-    } catch (error) {
-      setError('An unexpected error occurred. Please try again.');
-      console.error('Registration error:', error);
+    } catch (err) {
+      setError('An error occurred during registration.');
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto">
-      <div className="card">
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
-          Create Your Account
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          Create a new account
         </h2>
-        
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
-        )}
-        
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label htmlFor="username" className="label">
-              Username
-            </label>
-            <input
-              id="username"
-              type="text"
-              className="input"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={loading}
-            />
-          </div>
+        <p className="mt-2 text-center text-sm text-gray-600">
+          Or{' '}
+          <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
+            sign in to your existing account
+          </Link>
+        </p>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          {error && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
           
-          <div className="mb-4">
-            <label htmlFor="email" className="label">
-              Email Address
-            </label>
-            <input
-              id="email"
-              type="email"
-              className="input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-            />
-          </div>
-          
-          <div className="mb-4">
-            <label htmlFor="password" className="label">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Password must be at least 8 characters long
-            </p>
-          </div>
-          
-          <div className="mb-6">
-            <label htmlFor="confirmPassword" className="label">
-              Confirm Password
-            </label>
-            <input
-              id="confirmPassword"
-              type="password"
-              className="input"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={loading}
-            />
-          </div>
-          
-          <button
-            type="submit"
-            className="btn btn-primary w-full py-2"
-            disabled={loading}
-          >
-            {loading ? 'Creating Account...' : 'Register'}
-          </button>
-        </form>
-        
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Already have an account?{' '}
-            <Link to="/login" className="text-blue-600 hover:underline">
-              Log in here
-            </Link>
-          </p>
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                Username
+              </label>
+              <div className="mt-1">
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email address
+              </label>
+              <div className="mt-1">
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Password
+              </label>
+              <div className="mt-1">
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Must be at least 8 characters long
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                Confirm Password
+              </label>
+              <div className="mt-1">
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center">
+              <input
+                id="terms"
+                name="terms"
+                type="checkbox"
+                required
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
+                I agree to the{' '}
+                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+                  Privacy Policy
+                </a>
+              </label>
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                  loading ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
+              >
+                {loading ? 'Creating Account...' : 'Create Account'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

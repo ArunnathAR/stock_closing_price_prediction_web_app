@@ -17,10 +17,10 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Streamlit"
+args = "FastAPI Server"
 
 [[workflows.workflow]]
-name = "Streamlit"
+name = "FastAPI Server"
 author = "agent"
 
 [workflows.workflow.metadata]
@@ -31,7 +31,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd /home/runner/workspace && streamlit run app.py --server.port 5000"
+args = "python server.py"
 waitForPort = 5000
 
 [[ports]]
