@@ -1,25 +1,24 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 import { authAPI } from '../services/api';
 
-// Create the context
-const AuthContext = createContext();
+// Create context
+const AuthContext = createContext(null);
 
-// Create a provider component
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
 
-  // Initialize auth state
   useEffect(() => {
+    // Check for token on startup
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
     
     if (token && userData) {
       try {
-        setUser(JSON.parse(userData));
+        setCurrentUser(JSON.parse(userData));
       } catch (err) {
-        console.error('Failed to parse user data', err);
+        // Invalid user data in localStorage
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
@@ -28,43 +27,44 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // Login function
-  const login = async (username, password) => {
+  // Register function
+  const register = async (username, email, password) => {
     setLoading(true);
-    setError(null);
+    setError('');
     
     try {
-      const response = await authAPI.login(username, password);
-      const { token, user_id, username: userName } = response.data;
-      
-      const userData = { id: user_id, username: userName };
-      
-      // Save to localStorage
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      
-      setUser(userData);
+      await authAPI.register({ username, email, password });
+      // After registration, log in automatically
+      await login(username, password);
       return true;
     } catch (err) {
-      console.error('Login failed', err);
-      setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
+      setError(err.response?.data?.detail || 'Registration failed');
       return false;
     } finally {
       setLoading(false);
     }
   };
 
-  // Register function
-  const register = async (username, email, password) => {
+  // Login function
+  const login = async (username, password) => {
     setLoading(true);
-    setError(null);
+    setError('');
     
     try {
-      const response = await authAPI.register(username, email, password);
+      const response = await authAPI.login({ username, password });
+      const userData = {
+        id: response.data.user_id,
+        username: response.data.username,
+      };
+      
+      // Store token and user data
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      
+      setCurrentUser(userData);
       return true;
     } catch (err) {
-      console.error('Registration failed', err);
-      setError(err.response?.data?.detail || 'Registration failed. Please try a different username.');
+      setError(err.response?.data?.detail || 'Login failed');
       return false;
     } finally {
       setLoading(false);
@@ -76,31 +76,32 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     
     try {
-      // Call logout API
-      await authAPI.logout();
+      if (isAuthenticated()) {
+        await authAPI.logout();
+      }
     } catch (err) {
-      console.error('Logout error', err);
+      console.error('Logout error:', err);
     } finally {
-      // Clear local storage and state
+      // Clear local storage and state regardless of API call success
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      setUser(null);
+      setCurrentUser(null);
       setLoading(false);
     }
   };
 
   // Check if user is authenticated
   const isAuthenticated = () => {
-    return !!user;
+    return !!currentUser;
   };
 
   // Context value
   const value = {
-    user,
+    currentUser,
     loading,
     error,
-    login,
     register,
+    login,
     logout,
     isAuthenticated,
   };
@@ -108,7 +109,7 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Custom hook to use the auth context
+// Custom hook to use auth context
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

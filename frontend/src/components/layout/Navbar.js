@@ -1,13 +1,24 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Navbar = () => {
-  const { isAuthenticated, user, logout } = useAuth();
+  const [isOpen, setIsOpen] = useState(false);
+  const { currentUser, logout, isAuthenticated } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const toggleMenu = () => {
+    setIsOpen(!isOpen);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
 
   const isActive = (path) => {
-    return location.pathname === path ? 'text-blue-500 border-b-2 border-blue-500' : 'text-gray-700 hover:text-blue-500';
+    return location.pathname === path;
   };
 
   return (
@@ -16,63 +27,211 @@ const Navbar = () => {
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link to="/" className="text-2xl font-bold text-blue-600">
-                StockAnalyzer
+              <Link to="/" className="flex items-center">
+                <span className="text-2xl font-bold text-primary">StockAnalyzer</span>
               </Link>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
               <Link
                 to="/"
-                className={`inline-flex items-center px-1 pt-1 ${isActive('/')}`}
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  isActive('/') 
+                    ? 'border-primary text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
               >
                 Home
               </Link>
               <Link
-                to="/stocks"
-                className={`inline-flex items-center px-1 pt-1 ${isActive('/stocks')}`}
+                to="/stock-analysis"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  isActive('/stock-analysis') 
+                    ? 'border-primary text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
               >
                 Stock Analysis
               </Link>
+              <Link
+                to="/trading"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  isActive('/trading') 
+                    ? 'border-primary text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                Trading
+              </Link>
               {isAuthenticated() && (
-                <>
-                  <Link
-                    to="/trading"
-                    className={`inline-flex items-center px-1 pt-1 ${isActive('/trading')}`}
-                  >
-                    Trading
-                  </Link>
-                  <Link
-                    to="/dashboard"
-                    className={`inline-flex items-center px-1 pt-1 ${isActive('/dashboard')}`}
-                  >
-                    Dashboard
-                  </Link>
-                </>
+                <Link
+                  to="/dashboard"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    isActive('/dashboard') 
+                      ? 'border-primary text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  Dashboard
+                </Link>
               )}
             </div>
           </div>
           <div className="hidden sm:ml-6 sm:flex sm:items-center">
             {isAuthenticated() ? (
               <div className="flex items-center space-x-4">
-                <span className="text-gray-700">Hello, {user?.username}</span>
+                <span className="text-sm text-gray-700">
+                  Welcome, {currentUser.username}
+                </span>
                 <button
-                  onClick={logout}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  onClick={handleLogout}
+                  className="text-sm text-gray-700 hover:text-primary"
                 >
                   Logout
                 </button>
               </div>
             ) : (
-              <div className="flex space-x-4">
+              <div className="flex items-center space-x-4">
                 <Link
                   to="/login"
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  className="text-sm text-gray-700 hover:text-primary"
                 >
                   Login
                 </Link>
                 <Link
                   to="/register"
-                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  className="px-3 py-2 rounded-md text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                >
+                  Register
+                </Link>
+              </div>
+            )}
+          </div>
+          <div className="-mr-2 flex items-center sm:hidden">
+            <button
+              onClick={toggleMenu}
+              className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none"
+              aria-expanded="false"
+            >
+              <span className="sr-only">Open main menu</span>
+              {isOpen ? (
+                <svg
+                  className="block h-6 w-6"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="block h-6 w-6"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile menu */}
+      {isOpen && (
+        <div className="sm:hidden">
+          <div className="pt-2 pb-3 space-y-1">
+            <Link
+              to="/"
+              className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                isActive('/') 
+                  ? 'border-primary text-primary bg-primary-50'
+                  : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+              }`}
+              onClick={toggleMenu}
+            >
+              Home
+            </Link>
+            <Link
+              to="/stock-analysis"
+              className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                isActive('/stock-analysis') 
+                  ? 'border-primary text-primary bg-primary-50'
+                  : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+              }`}
+              onClick={toggleMenu}
+            >
+              Stock Analysis
+            </Link>
+            <Link
+              to="/trading"
+              className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                isActive('/trading') 
+                  ? 'border-primary text-primary bg-primary-50'
+                  : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+              }`}
+              onClick={toggleMenu}
+            >
+              Trading
+            </Link>
+            {isAuthenticated() && (
+              <Link
+                to="/dashboard"
+                className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                  isActive('/dashboard') 
+                    ? 'border-primary text-primary bg-primary-50'
+                    : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                }`}
+                onClick={toggleMenu}
+              >
+                Dashboard
+              </Link>
+            )}
+          </div>
+          <div className="pt-4 pb-3 border-t border-gray-200">
+            {isAuthenticated() ? (
+              <div className="space-y-1">
+                <div className="px-4 py-2">
+                  <p className="text-sm font-medium text-gray-500">Signed in as</p>
+                  <p className="text-sm font-medium text-gray-800">{currentUser.username}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    toggleMenu();
+                  }}
+                  className="block w-full text-left px-4 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Link
+                  to="/login"
+                  className="block px-4 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                  onClick={toggleMenu}
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/register"
+                  className="block px-4 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                  onClick={toggleMenu}
                 >
                   Register
                 </Link>
@@ -80,84 +239,7 @@ const Navbar = () => {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Mobile menu */}
-      <div className="sm:hidden">
-        <div className="pt-2 pb-3 space-y-1">
-          <Link
-            to="/"
-            className={`block pl-3 pr-4 py-2 border-l-4 ${
-              isActive('/') ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
-            }`}
-          >
-            Home
-          </Link>
-          <Link
-            to="/stocks"
-            className={`block pl-3 pr-4 py-2 border-l-4 ${
-              isActive('/stocks') ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
-            }`}
-          >
-            Stock Analysis
-          </Link>
-          {isAuthenticated() && (
-            <>
-              <Link
-                to="/trading"
-                className={`block pl-3 pr-4 py-2 border-l-4 ${
-                  isActive('/trading') ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
-                }`}
-              >
-                Trading
-              </Link>
-              <Link
-                to="/dashboard"
-                className={`block pl-3 pr-4 py-2 border-l-4 ${
-                  isActive('/dashboard') ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
-                }`}
-              >
-                Dashboard
-              </Link>
-            </>
-          )}
-          {isAuthenticated() ? (
-            <div className="border-t border-gray-200 pt-4 pb-3">
-              <div className="flex items-center px-4">
-                <div className="flex-shrink-0">
-                  <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
-                    {user?.username.charAt(0).toUpperCase()}
-                  </div>
-                </div>
-                <div className="ml-3">
-                  <div className="text-base font-medium text-gray-800">{user?.username}</div>
-                </div>
-                <button
-                  onClick={logout}
-                  className="ml-auto bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm font-medium"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="border-t border-gray-200 pt-4 pb-3 flex justify-around">
-              <Link
-                to="/login"
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium"
-              >
-                Login
-              </Link>
-              <Link
-                to="/register"
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium"
-              >
-                Register
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </nav>
   );
 };
